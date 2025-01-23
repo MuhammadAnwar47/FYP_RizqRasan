@@ -1,0 +1,6 @@
+I am using Firebase Auth to log in the user user can register using email and password ,
+User logs in with his emial and password,.
+But when user register With creating the user login i also save his name and ophone in firestore and his mail.
+
+
+So now when user is registered and logs in using his credentials that are email and password. Use that email to go thorugh my customers in firestore and determin whose gmail id is that to fetch the name of customer. That way i can know who is the logged in user so i can use his name to then display him different packages and he can select one and then that package will be added with his info too so on admin side admin can see that user name and the package he selected.

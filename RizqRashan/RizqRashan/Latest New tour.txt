@@ -1,0 +1,2564 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Text,
+  SafeAreaView,
+  ImageBackground,
+  TextInput,
+  Modal,
+  Switch,Button,Alert 
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import Icon from 'react-native-vector-icons/FontAwesome';
+import firestore from '@react-native-firebase/firestore'; // Import Firestore from Firebase
+import kashmirImage from './Kshmirr.png';
+import auth from '@react-native-firebase/auth';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import storage from '@react-native-firebase/storage';
+import { CheckBox } from 'react-native-elements';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+const NewTour = () => {
+
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
+  const [showReturnPicker, setShowReturnPicker] = useState(false);
+
+  const handleDepartureDatePress = () => {
+    setShowDeparturePicker(true);
+  };
+
+  const handleReturnDatePress = () => {
+    setShowReturnPicker(true);
+  };
+
+  const handleDepartureDateChange = (event, selectedDate) => {
+    setShowDeparturePicker(false);
+    if (selectedDate) {
+      setDepartureDate(selectedDate);
+    }
+  };
+
+  const handleReturnDateChange = (event, selectedDate) => {
+    setShowReturnPicker(false);
+    if (selectedDate) {
+      setReturnDate(selectedDate);
+    }
+  };
+  const currentDate = new Date();
+  const [user, setUser] = useState(null);
+  const [customerData, setCustomerData] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [numberOfPeople, setNumberOfPeople] = useState(0);
+  const [hasID, setHasID] = useState(false);
+  // const [paymentMethod, setPaymentMethod] = useState('Pending');
+  const [selectedPackagePrice, setSelectedPackagePrice] = useState(0);
+  useEffect(() => {
+    // Check the currently logged-in user
+    const currentUser = auth().currentUser;
+    setUser(currentUser);
+  }, []);
+
+  const handleBookNow = () => {
+    setModalVisible(true);
+  };
+
+  const handleConfirmBooking = () => {
+    console.log("O am here");
+    console.log(user);
+    if (user) {
+      // Update the Firestore document associated with the logged-in user
+      firestore()
+        .collection('customers')
+        .where('email', '==', user.email)
+        .get()
+        .then((querySnapshot) => {
+          if (!querySnapshot.empty) {
+            const doc = querySnapshot.docs[0];
+            doc.ref.update({
+              numberOfPeopleGoing: numberOfPeople,
+              hasIDCard: hasID,
+              payment: paymentMethod,
+              selectedPackage: selectedPackageName, // Set the selected package name
+            });
+            setModalVisible(false);
+            // Handle payment confirmation or other actions
+          }
+        })
+        .catch((error) => {
+          // Handle errors
+          console.log("Error is", error);
+        });
+    }
+  };
+
+  // const handleConfirmBooking = () => {
+  //   if (user) {
+  //     // Update the Firestore document associated with the logged-in user
+  //     firestore()
+  //       .collection('customers')
+  //       .where('email', '==', user.email)
+  //       .get()
+  //       .then((querySnapshot) => {
+  //         if (!querySnapshot.empty) {
+  //           const doc = querySnapshot.docs[0];
+  //           doc.ref.update({
+  //             numberOfPeopleGoing: numberOfPeople,
+  //             hasIDCard: hasID,
+  //             payment: paymentMethod,
+  //             selectedPackage: selectedPackageName, // Set the selected package name
+  //             paymentProof: receiptImage, // Add this line to save payment proof
+  //           });
+  //           setModalVisible(false);
+            
+  //           // Handle payment confirmation or other actions
+  //         }
+  //       })
+  //       .catch((error) => {
+  //         // Handle errors
+  //         console.log('Error is', error);
+  //       });
+  //   }
+  // };
+
+
+  const handleCreateCustomPackage = () => {
+    if (user) {
+      const customPackageData = {
+        adults,
+        children,
+        infants,
+        departureCity,
+        departureDate,
+        returnDate,
+        locations,
+        tourType,
+        numberOfRooms,
+        hotelType,
+        roomType,
+        otherPreferences,
+        createdBy: user.displayName || user.email, // Use the user's name or email as the creator
+      };
+  
+      // Add your validation logic here if needed
+  
+      // Create a new document in the "Custom packages" collection
+      firestore()
+        .collection('Custom packages')
+        .add(customPackageData)
+        .then((docRef) => {
+          // Handle successful creation, e.g., show a success message
+          console.log('Custom package created with ID:', docRef.id);
+          setModalVisible(false); // Close the modal after creating the custom package
+          setFormVisible(false);
+        })
+        .catch((error) => {
+          // Handle Firestore add document errors
+          console.log('Error creating custom package:', error);
+          // Show an error message to the user
+        });
+    }
+  };
+  
+
+  const navigation = useNavigation();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredPackages, setFilteredPackages] = useState([]);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [selectedSubPackage, setSelectedSubPackage] = useState(null);
+  const [packageModalVisible, setPackageModalVisible] = useState(false);
+  const [subPackageModalVisible, setSubPackageModalVisible] = useState(false);
+  const [packages, setPackages] = useState([]);
+  const [selectedPackageName, setSelectedPackageName] = useState('');
+  
+ const fetchPackages = async () => {
+    const packageCollection = firestore().collection('Packages');
+    const packageData = await packageCollection.get();
+  
+    const packages = packageData.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    // console.log("ALLLLL PKAGESSS",packages)
+    // Find the package with the name "Kashmir Packages" and set its image
+    const kashmirPackage = packages.find((packageItem) => packageItem.name === "Kashmir packages");
+    const HAAZPackage = packages.find((packageItem) => packageItem.name === "haziq pkg");
+    const Sastapkg = packages.find((packageItem) => packageItem.name === "sasta package");
+    const defaultImages = [
+      require('./image1.jpg'),
+      require('./image2.jpg'),
+      require('./image3.jpg'),
+      require('./image4.jpg'),
+      require('./image5.jpg'),
+      require('./image6.jpg'),
+      require('./image7.jpg'),
+   
+    ];
+  
+    // Assign a random default image to each package
+    packages.forEach((packageItem) => {
+      const randomIndex = Math.floor(Math.random() * defaultImages.length);
+      packageItem.image = defaultImages[randomIndex];
+    });
+    // console.log("I am heree")
+    // console.log(kashmirPackage);
+    if (kashmirPackage) {
+      kashmirPackage.image = require('./Kshmirr.png');
+    }
+    if (HAAZPackage) {
+      HAAZPackage.image = require('./Murree.jpg');
+    }
+    if (Sastapkg) {
+      Sastapkg.image = require('./nelumimg.jpg');
+    }
+    
+    // Automatically set the selected package to the first package
+    const firstPackage = packages[0];
+    setSelectedPackage(firstPackage);
+  
+    setPackages(packages);
+  };
+  
+  useEffect(() => {
+    // Fetch packages from Firestore when the component mounts
+    fetchPackages();
+  }, []);
+  
+  useEffect(() => {
+    // Fetch packages from Firestore when the component mounts
+    fetchPackages();
+  }, []);
+  useEffect(() => {
+    // Fetch packages from Firestore when the component mounts
+    // console.log(packages);
+    
+  }, [packages]);
+  const handlePackageSelection = (packageName) => {
+    const selectedPackage = packages.find((packageItem) => packageItem.name === packageName);
+    if (selectedPackage.name === "Kashmir packages") {
+      selectedPackage.image = require('./Kshmirr.png'); // Replace with the correct local image path
+    } else {
+      // Use the image from Firestore for other packages
+      // You can use the selectedPackage.image as it is.
+    }
+  
+    setSelectedPackage(selectedPackage);
+    setPackageModalVisible(true);
+  };
+
+  const handleSubPackageSelection = (subpackageName) => {
+    const selectedSubPackage = selectedPackage.subpackages.find((subpackage) => subpackage.name === subpackageName);
+    setSelectedSubPackage(selectedSubPackage);
+    setSelectedPackageName(selectedSubPackage.name);
+    setSelectedPackagePrice(selectedSubPackage.price);
+    setSubPackageModalVisible(true);
+  };
+
+  const handleSearch = () => {
+    // Filter packages based on searchQuery
+    const filtered = packages.filter((packageItem) =>
+      packageItem.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    setFilteredPackages(filtered);
+  };
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState(null);
+  const [receiptImage, setReceiptImage] = useState(null);
+  
+  const [isFormVisible, setFormVisible] = useState(false);
+  const [peopleCount, setPeopleCount] = useState(1);
+  const [childrenCount, setChildrenCount] = useState(0);
+  const [adultsCount, setAdultsCount] = useState(1);
+  const [hasCNIC, setHasCNIC] = useState(false);
+  const [selectedPlaces, setSelectedPlaces] = useState([]);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [isModaLVisible, setModaLVisible] = useState(false);
+  const [adults, setAdults] = useState(1);
+  const [children, setChildren] = useState(1);
+  const [infants, setInfants] = useState(1);
+  const [departureCity, setDepartureCity] = useState('');
+  // const [departureDate, setDepartureDate] = useState('');
+  // const [returnDate, setReturnDate] = useState('');
+  const [locations, setLocations] = useState('');
+  const [tourType, setTourType] = useState('Friends and Family');
+  const [numberOfRooms, setNumberOfRooms] = useState(1);
+  const [hotelType, setHotelType] = useState('Best available hotel/resort');
+  const [roomType, setRoomType] = useState('Standard room');
+  const [otherPreferences, setOtherPreferences] = useState('');
+   const opeNModal = () => {
+    setFormVisible(true);
+  };
+
+  const closEModal = () => {
+    setFormVisible(false);
+  };
+  const places = ['Kashmir', 'Nathiagali', 'Swat', 'Murree'];
+
+  const toggleFormModal = () => {
+    setFormVisible(!isFormVisible);
+  };
+
+  // Function to open the payment modal
+  const openPaymentModal = (method) => {
+    setPaymentMethod(method);
+    setShowPaymentModal(true);
+    if(method==="Bank" ||method==="Easypaisa")
+    {
+    openConfirmationModal();
+  }
+};
+// const renderAboutYourTour = () => (
+//   <View style={styles.aboutYourTourContainer}>
+//     <Text style={styles.sectionHeading}>ABOUT YOUR TOUR</Text>
+
+//     <Text>Adults:</Text>
+//       <Picker
+//         selectedValue={adults}
+//         onValueChange={(itemValue) => setAdults(itemValue)}
+//         style={styles.picker}
+//       >
+//         {Array.from({ length: 10 }, (_, i) => (
+//           <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+//         ))}
+//         <Picker.Item label="Above 10" value="10+" />
+//       </Picker>
+
+//       <Text>Children (2 - 11 yrs):</Text>
+//       <Picker
+//         selectedValue={children}
+//         onValueChange={(itemValue) => setChildren(itemValue)}
+//         style={styles.picker}
+//       >
+//         {Array.from({ length: 10 }, (_, i) => (
+//           <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+//         ))}
+//         <Picker.Item label="Above 10" value="10+" />
+//       </Picker>
+
+//       <Text>Infants (0 - 1 yrs):</Text>
+//       <Picker
+//         selectedValue={infants}
+//         onValueChange={(itemValue) => setInfants(itemValue)}
+//         style={styles.picker}
+//       >
+//         {Array.from({ length: 10 }, (_, i) => (
+//           <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+//         ))}
+//         <Picker.Item label="Above 10" value="10+" />
+//       </Picker>
+
+//       <Text>Departure City:</Text>
+//       <TextInput
+//         value={departureCity}
+//         onChangeText={(text) => setDepartureCity(text)}
+//         style={styles.input}
+//       /><View>
+//       <Text>Departure Date:</Text>
+//       <TouchableOpacity onPress={handleDepartureDatePress}>
+//         <Icon name="calendar" size={20} />
+//       </TouchableOpacity>
+//       {showDeparturePicker && (
+//         <DateTimePicker
+//           testID="startDateTimePicker"
+//           value={departureDate}
+//           mode="date"
+//           is24Hour={true}
+//           textColor="#FFFFFF"
+//           display="default"
+//           minimumDate={currentDate}
+//           onChange={handleDepartureDateChange}
+//         />
+//       )}
+
+//       <Text>Return DateWE:</Text>
+//       <TouchableOpacity onPress={handleReturnDatePress}>
+//         <Icon name="calendar" size={20} />
+//       </TouchableOpacity>
+//       {showReturnPicker && (
+//         <DateTimePicker
+//           testID="endDateTimePicker"
+//           value={returnDate}
+//           mode="date"
+//           is24Hour={true}
+//           display="default"
+//           minimumDate={currentDate}
+//           onChange={handleReturnDateChange}
+//         />
+//       )}
+//     </View>
+//  <Text>Departure Date:</Text>
+//       <DateTimePicker
+//         testID="startDateTimePicker"
+//         value={new Date(departureDate)}
+//         mode="date"
+//         is24Hour={true}
+//         textColor="#FFFFFF"
+//         display="default"
+//         minimumDate={currentDate}
+//         onChange={(event, selectedDate) => {
+//           const currentDate = selectedDate || new Date();
+//           setDepartureDate(currentDate.toISOString().split('T')[0]); // Update state with selected date
+//         }}
+//       />
+
+//       <Text>Return Date:</Text>
+//       <DateTimePicker
+//         testID="endDateTimePicker"
+//         value={new Date(returnDate)}
+//         mode="date"
+//         is24Hour={true}
+//         display="default"
+//         minimumDate={currentDate}
+//         onChange={(event, selectedDate) => {
+//           const currentDate = selectedDate || new Date();
+//           setReturnDate(currentDate.toISOString().split('T')[0]); // Update state with selected date
+//         }}
+//       />
+
+
+//       <Text>Which areas/destinations/locations would you like to visit?</Text>
+//       <TextInput
+//         value={locations}
+//         onChangeText={(text) => setLocations(text)}
+//         style={styles.input}
+//         multiline
+//       />
+
+//   </View>
+// );
+const [departureDate, setDepartureDate] = useState(new Date());
+const [returnDate, setReturnDate] = useState(new Date());
+const renderAboutYourTour = () => (
+  <View style={styles.aboutYourTourContainer}>
+    <Text style={styles.sectionHeading}>ABOUT YOUR TOUR</Text>
+
+    <View>
+      <Text>Adults:</Text>
+      <Picker
+        selectedValue={adults}
+        onValueChange={(itemValue) => setAdults(itemValue)}
+        style={styles.picker}
+      >
+        {Array.from({ length: 10 }, (_, i) => (
+          <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+        ))}
+        <Picker.Item label="Above 10" value="10+" />
+      </Picker>
+
+      <Text>Children (2 - 11 yrs):</Text>
+      <Picker
+        selectedValue={children}
+        onValueChange={(itemValue) => setChildren(itemValue)}
+        style={styles.picker}
+      >
+        {Array.from({ length: 10 }, (_, i) => (
+          <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+        ))}
+        <Picker.Item label="Above 10" value="10+" />
+      </Picker>
+
+      <Text>Infants (0 - 1 yrs):</Text>
+      <Picker
+        selectedValue={infants}
+        onValueChange={(itemValue) => setInfants(itemValue)}
+        style={styles.picker}
+      >
+        {Array.from({ length: 10 }, (_, i) => (
+          <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+        ))}
+        <Picker.Item label="Above 10" value="10+" />
+      </Picker>
+
+      <Text>Departure City:</Text>
+      <TextInput
+        value={departureCity}
+        onChangeText={(text) => setDepartureCity(text)}
+        style={styles.input}
+      />
+    </View>
+
+    <View>
+      <Text>Departure Date:</Text>
+      <TouchableOpacity onPress={handleDepartureDatePress}>
+        <Icon name="calendar" size={20} />
+      </TouchableOpacity>
+      {showDeparturePicker && (
+        <DateTimePicker
+          testID="startDateTimePicker"
+          value={departureDate}
+          mode="date"
+          is24Hour={true}
+          textColor="#FFFFFF"
+          display="default"
+          minimumDate={currentDate}
+          onChange={handleDepartureDateChange}
+        />
+      )}
+
+      <Text>Return Date:</Text>
+      <TouchableOpacity onPress={handleReturnDatePress}>
+        <Icon name="calendar" size={20} />
+      </TouchableOpacity>
+      {showReturnPicker && (
+        <DateTimePicker
+          testID="endDateTimePicker"
+          value={returnDate}
+          mode="date"
+          is24Hour={true}
+          display="default"
+          minimumDate={currentDate}
+          onChange={handleReturnDateChange}
+        />
+      )}
+    </View>
+
+    <Text>Which areas/destinations/locations would you like to visit?</Text>
+    <TextInput
+      value={locations}
+      onChangeText={(text) => setLocations(text)}
+      style={styles.input}
+      multiline
+    />
+  </View>
+);
+const handleDateChange = (event, selectedDate) => {
+  setShowDatePicker(false);
+  if (selectedDate !== undefined) {
+    // Handle the selected date
+    setSelectedDate(selectedDate);
+  }
+};
+
+const showDatepicker = () => {
+  setShowDatePicker(true);
+};
+const [showDatePicker, setShowDatePicker] = useState(false);
+// const [selectedDate, setSelectedDate] = useState(new Date());
+const renderAccommodation = () => (
+  <View style={styles.accommodationContainer}>
+    <Text style={styles.sectionHeading}>ACCOMMODATION</Text>
+
+    <Text>Tour/Adventure Type:</Text>
+      <Picker
+        selectedValue={tourType}
+        onValueChange={(itemValue) => setTourType(itemValue)}
+        style={styles.picker}
+      >
+        <Picker.Item label="Friends and Family" value="Friends and Family" />
+        <Picker.Item label="Solo" value="Solo" />
+        <Picker.Item label="Couple" value="Couple" />
+        <Picker.Item label="Honeymoon" value="Honeymoon" />
+        <Picker.Item label="Colleagues" value="Colleagues" />
+        <Picker.Item label="Corporate" value="Corporate" />
+        <Picker.Item label="School/University" value="School/University" />
+      </Picker>
+
+      <Text>Number of Rooms:</Text>
+      <Picker
+        selectedValue={numberOfRooms}
+        onValueChange={(itemValue) => setNumberOfRooms(itemValue)}
+        style={styles.picker}
+      >
+        {Array.from({ length: 9 }, (_, i) => (
+          <Picker.Item key={i} label={`${i + 1}`} value={i + 1} />
+        ))}
+        <Picker.Item label="More than 10" value="more than 10" />
+      </Picker>
+
+      <Text>Preferred Hotel Type:</Text>
+      <Picker
+        selectedValue={hotelType}
+        onValueChange={(itemValue) => setHotelType(itemValue)}
+        style={styles.picker}
+      >
+        <Picker.Item
+          label="Best available hotel/resort"
+          value="Best available hotel/resort"
+        />
+        <Picker.Item label="Mid range service" value="Mid range service" />
+        <Picker.Item label="Very basic(but clean)" value="Very basic(but clean)" />
+        <Picker.Item label="Budget(Limited service)" value="Budget(Limited service)" />
+        <Picker.Item label="Least Expensive" value="Least Expensive" />
+      </Picker>
+
+      <Text>Preferred Room Type:</Text>
+      <Picker
+        selectedValue={roomType}
+        onValueChange={(itemValue) => setRoomType(itemValue)}
+        style={styles.picker}
+
+      >
+        <Picker.Item label="Standard room" value="Standard room" />
+        <Picker.Item label="Deluxe room" value="Deluxe room" />
+        <Picker.Item label="Suites" value="Suites" />
+        <Picker.Item label="Best rooms available" value="Best rooms available" />
+      </Picker>
+
+      <Text>Other preferences regarding your accommodation:</Text>
+      <TextInput
+        value={otherPreferences}
+        onChangeText={(text) => setOtherPreferences(text)}
+        style={styles.input}
+        multiline
+      />
+  </View>
+);
+const renderModalContent = () => (
+  <ScrollView>
+  <View style={styles.modalContainer}>
+    <View style={styles.modalContent}>
+      <Text style={styles.modalHeading}>Customize My Tour</Text>
+      
+      {renderAboutYourTour()}
+      {/* <Text style={styles.sectionHeading}>ACCOMMODATION</Text> */}
+      {renderAccommodation()}
+      
+
+      <TouchableOpacity onPress={handleCreateCustomPackage} style={styles.closeButton}>
+  <Text style={styles.bookNowButtonText}>Book Now</Text>
+</TouchableOpacity>
+      <TouchableOpacity style={styles.closeButton} onPress={closEModal}>
+        <Text>Close</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+  </ScrollView>
+);
+  // Function to open the confirmation modal
+  const openConfirmationModal = () => {
+    setShowConfirmationModal(true);
+  };
+  // Function to handle image upload
+  const handleImageUpload = async () => {
+    const options = {
+      mediaType: 'photo',
+      maxWidth: 500,
+      maxHeight: 500,
+      quality: 0.8,
+    };
+  
+    launchImageLibrary(options, async (response) => {
+      if (response.didCancel) {
+        console.log('Image picker cancelled');
+      } else if (response.error) {
+        console.error('ImagePicker Error: ', response.error);
+      } else {
+        try {
+          // Get the current authenticated user
+          const user = auth().currentUser;
+  
+          if (user) {
+            // Fetch user data from Firestore
+            const userSnapshot = await firestore()
+              .collection('customers')
+              .where('email', '==', user.email)
+              .get();
+  
+            if (!userSnapshot.empty) {
+              // Assuming there is only one document with the given email
+              const userId = userSnapshot.docs[0].id;
+  
+              // Upload the image to storage and add to Firestore
+              await uploadImageToStorage(response.assets[0].uri, userId);
+              setReceiptImage(response.assets[0].uri);
+            } else {
+              console.error('User document not found in Firestore.');
+            }
+          } else {
+            console.error('User not authenticated.');
+          }
+        } catch (error) {
+          console.error('Error handling image upload:', error);
+        }
+      }
+    });
+  };
+
+  
+  // const uploadImageToStorage = async (paymentProofUri) => {
+  //   try {
+  //     const response = await fetch(paymentProofUri);
+  //     const blob = await response.blob();
+  
+  //     // Get the current authenticated user
+  //     const user = auth().currentUser;
+  // console.log(user);
+  //     if (user) {
+  //       // Fetch user data from Firestore
+  //       const userSnapshot = await firestore()
+  //         .collection('customers')
+  //         .where('email', '==', user.email)
+  //         .get();
+  
+  //       if (!userSnapshot.empty) {
+  //         // Assuming there is only one document with the given email
+  //         const userData = userSnapshot.docs[0].data();
+  //         const userName = userData.name;
+  //         const userPhoneNumber = userData.phoneNumber;
+  
+  //         // Create a subfolder using the user's name and phone number
+  //         const subfolderName = `${userName}_${userPhoneNumber}`;
+  //         const reference = storage().ref(`paymentProofs/${user.uid}/${subfolderName}/image.jpg`);
+  
+  //         // Upload the image to the specified path
+  //         await reference.put(blob);
+  
+  //         // Get the download URL of the uploaded image
+  //         const downloadURL = await reference.getDownloadURL();
+  
+  //         // Store the download URL in Firestore along with user ID
+  //         await firestore().collection('paymentProofs').add({
+  //           userId: user.uid,
+  //           imageUrl: downloadURL,
+  //           // Add other data or metadata if needed
+  //         });
+  
+  //         console.log('Image uploaded successfully!');
+  //       } else {
+  //         console.error('User not found in Firestore.');
+          
+  //       }
+
+  //     } else {
+  //       console.error('User not authenticated.');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error uploading image:', error);
+  //   }
+  // };
+//gg
+  // const uploadImageToStorage = async (paymentProofUri) => {
+  //   try {
+  //     const response = await fetch(paymentProofUri);
+  //     const blob = await response.blob();
+  
+  //     // Get the current authenticated user
+  //     const user = auth().currentUser;
+  
+  //     if (user) {
+  //       // Fetch user data from Firestore
+  //       const userSnapshot = await firestore()
+  //         .collection('customers')
+  //         .where('email', '==', user.email)
+  //         .get();
+ 
+  //       if (!userSnapshot.empty) {
+  //         // Assuming there is only one document with the given email
+  //         const userData = userSnapshot.docs[0].data();
+  //         const userName = userData.name;
+          
+  //         const userPhoneNumber = userData.phoneNumber;
+  
+  //         // Create a subfolder using the user's name and phone number
+  //         const subfolderName = `${userName}_${userPhoneNumber}`;
+  //         const reference = storage().ref(`paymentProofs/${user.uid}/${subfolderName}/image.jpg`);
+  
+  //         // Check if the folder exists, create it if not
+  //         const folderExists = await reference.parent.child('image.jpg').getDownloadURL().then(
+  //           () => true,
+  //           (error) => {
+  //             if (error.code === 'storage/object-not-found') {
+  //               return false;
+  //             }
+  //             throw error;
+  //           }
+  //         );
+  
+  //         if (!folderExists) {
+  //           // Create the folder
+  //           await reference.parent.put({}); // Upload an empty file to create the folder
+  //         }
+  
+  //         // Upload the image to the specified path
+  //         await reference.put(blob);
+  
+  //         // Get the download URL of the uploaded image
+  //         const downloadURL = await reference.getDownloadURL();
+  
+  //         // Store the download URL in Firestore along with user ID
+  //         await firestore().collection('paymentProofs').add({
+  //           userId: user.uid,
+  //           imageUrl: downloadURL,
+  //           // Add other data or metadata if needed
+  //         });
+  
+  //         console.log('Image uploaded successfully!');
+  //       } else {
+  //         console.error('User not found in Firestore.');
+  //       }
+  //     } else {
+  //       console.error('User not authenticated.');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error uploading image:', error);
+  //   }
+  // };
+  const uploadImageToStorage = async (paymentProofUri) => {
+    try {
+      const response = await fetch(paymentProofUri);
+      const blob = await response.blob();
+  
+      // Get the current authenticated user
+      const user = auth().currentUser;
+  
+      if (user) {
+        // Fetch user data from Firestore
+        const userSnapshot = await firestore()
+          .collection('customers')
+          .where('email', '==', user.email)
+          .get();
+  
+        if (!userSnapshot.empty) {
+          // Assuming there is only one document with the given email
+          const userData = userSnapshot.docs[0].data();
+          const userName = userData.name;
+          const userPhoneNumber = userData.phoneNumber;
+  
+          // Create a subfolder using the user's name and phone number
+          const subfolderName = `${userName}_${userPhoneNumber}`;
+          const reference = storage().ref(`paymentProofs/vyvuU8xDA3OYXXxjUHPGcL8QpTl1/${subfolderName}/image.jpg`);
+  
+          // Upload the image to the specified path
+          await reference.put(blob);
+  
+          // Get the download URL of the uploaded image
+          const downloadURL = await reference.getDownloadURL();
+  
+          // Store the download URL in Firestore along with user ID
+          await firestore().collection('paymentProofs').add({
+            userId: user.uid,
+            imageUrl: downloadURL,
+            // Add other data or metadata if needed
+          });
+  
+          console.log('Image uploaded successfully!');
+        } else {
+          console.error('User not found in Firestore.');
+        }
+      } else {
+        console.error('User not authenticated.');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+    }
+  };
+
+
+
+  
+  const handleCreatePackage = () => {
+    toggleFormModal(); // Close the modal after creating the package
+
+    // Display an alert with the message
+    Alert.alert(
+      'Package Created',
+      'Your package has been created. Please wait for confirmation from us.',
+      [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
+    );
+  };
+  const handlePlaceSelection = (place) => {
+    if (selectedPlaces.includes(place)) {
+      setSelectedPlaces(selectedPlaces.filter((selectedPlace) => selectedPlace !== place));
+    } else {
+      setSelectedPlaces([...selectedPlaces, place]);
+    }
+  };
+  return (
+    <SafeAreaView style={styles.container}>
+      <ImageBackground
+        source={require('./Paktour.jpeg')}
+        style={styles.header}
+        borderRadius={50}
+        borderTopLeftRadius={0}
+        borderTopRightRadius={0}
+      >
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search for packages..."
+            placeholderTextColor="white"
+            value={searchQuery}
+            onChangeText={(text) => setSearchQuery(text)}
+          />
+          <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+            <FontAwesome name="search" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+      <Button title="Create Own Package" onPress={toggleFormModal} />
+      <ScrollView contentContainerStyle={styles.packageContainer}>
+        {(searchQuery.trim() === '' ? packages : filteredPackages).map((packageItem) => (
+          <TouchableOpacity
+            key={packageItem.name}
+            style={styles.packageItem}
+            onPress={() => handlePackageSelection(packageItem.name)}
+          >
+            
+            <Image
+      source={
+        packageItem.name === 'Kashmir Packages'
+          ? require('./Kshmirr.png')
+          : packageItem.image
+      }
+      style={styles.packageImage}
+    />
+            <Text style={styles.packageName}>{packageItem.name}</Text>
+          </TouchableOpacity>
+        ))}
+        
+         <View style={{ height: 100 }}><Text>.</Text></View>
+      </ScrollView>
+
+      <Modal
+      animationType="slide"
+      transparent={true}
+      visible={packageModalVisible}
+      onRequestClose={() => {
+        setPackageModalVisible(!packageModalVisible);
+      }}
+    >
+      <View style={modalStyless.modalContainer}>
+        <Image
+          source={require('./Kshmirr.png')}
+          style={modalStyless.kashmirImage}
+        />
+        <ScrollView>
+          <View style={modalStyless.modalContent}>
+            {/* <Text style={modalStyless.modalTitle}>
+              Azad Jammu and Kashmir
+            </Text>
+            <Text style={modalStyless.modalDescription}>
+              Azad Jammu and Kashmir, abbreviated as AJK and colloquially referred to as simply Azad Kashmir, is a region administered by Pakistan as a nominally self-governing entity and constituting the western portion of the larger Kashmir region, which has been the subject of a dispute between India and Pakistan since 1947.
+            </Text> */}
+            <Text style={modalStyless.availablePackagesHeading}>
+              Available Packages
+            </Text>
+            {selectedPackage &&
+              selectedPackage.subpackages.map((subpackage, index) => (
+                <TouchableOpacity
+                  key={subpackage.name}
+                  style={modalStyless.packageContainer}
+                  onPress={() => handleSubPackageSelection(subpackage.name)}
+                >
+                  <Image
+                    source={require('./Kshmirr.png')}
+                    style={modalStyless.packageImage}
+                  />
+                  <View style={modalStyless.packageTextContainer}>
+                    <Text style={modalStyless.modalText}>{subpackage.name}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            <TouchableOpacity
+              style={modalStyless.closeModalButton}
+              onPress={() => setPackageModalVisible(false)}
+            >
+              <Text style={modalStyless.closeModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+
+{/* Subpackage Modal */}
+
+<Modal
+  animationType="slide"
+  transparent={true}
+  visible={subPackageModalVisible}
+  onRequestClose={() => {
+    setSubPackageModalVisible(!subPackageModalVisible);
+  }}
+>
+  <View style={modalStyles.modalContainer}>
+    <View style={modalStyles.modalContent}>
+      <ScrollView contentContainerStyle={modalStyles.scrollView}>
+        <Text style={modalStyles.modalTitle}>
+          {selectedSubPackage && selectedSubPackage.name}
+        </Text>
+        <Text style={modalStyles.modalText}>
+          Price: ${selectedSubPackage && selectedSubPackage.price}
+        </Text>
+        <Text style={modalStyles.sectionTitle}>Itinerary:</Text>
+        {selectedSubPackage &&
+          selectedSubPackage.itinerary &&
+          selectedSubPackage.itinerary.map((item, index) => (
+            <View key={index}>
+              <Text style={modalStyles.subTitle}>
+                {item.day} - {item.time}
+              </Text>
+              <Text style={modalStyles.modalText}>
+                {item.description && item.description.join('\n')}
+              </Text>
+            </View>
+          ))}
+        <Text style={modalStyles.sectionTitle}>Included:</Text>
+        {selectedSubPackage &&
+          selectedSubPackage.included &&
+          selectedSubPackage.included.map((item, index) => (
+            <Text key={index} style={modalStyles.modalText}>
+              - {item}
+            </Text>
+          ))}
+        <Text style={modalStyles.sectionTitle}>Excluded:</Text>
+        {selectedSubPackage &&
+          selectedSubPackage.excluded &&
+          selectedSubPackage.excluded.map((item, index) => (
+            <Text key={index} style={modalStyles.modalText}>
+              - {item}
+            </Text>
+          ))}
+        <Text style={modalStyles.sectionTitle}>Places of Attraction:</Text>
+        {selectedSubPackage &&
+          selectedSubPackage.placesOfAttraction &&
+          selectedSubPackage.placesOfAttraction.map((item, index) => (
+            <Text key={index} style={modalStyles.modalText}>
+              - {item}
+            </Text>
+          ))}
+        <Text style={modalStyles.sectionTitle}>Departure Location:</Text>
+        <Text style={modalStyles.modalText}>
+          {selectedSubPackage && selectedSubPackage.departureLocation}
+        </Text>
+        <Text style={modalStyles.sectionTitle}>Things to Carry:</Text>
+        {selectedSubPackage &&
+          selectedSubPackage.thingsToCarry &&
+          selectedSubPackage.thingsToCarry.map((item, index) => (
+            <Text key={index} style={modalStyles.modalText}>
+              - {item}
+            </Text>
+          ))}
+        <TouchableOpacity
+          style={modalStyles.closeModalButton}
+          onPress={() => setSubPackageModalVisible(false)}
+        >
+          <Text style={modalStyles.closeModalButtonText}>Close</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={modalStyles.closeModalButtonn}
+          onPress={handleBookNow}
+        >
+          <Text style={modalStyles.closeModalButtonText}>Book Now!</Text>
+        </TouchableOpacity>
+       {/* Modal for booking confirmation */}
+       {/* <Modal animationType="slide" transparent={false} visible={modalVisible}>
+      <View style={styles.bookingModalContainer}>
+        <Text style={styles.bookingModalTitle}>How many people are going?</Text>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={numberOfPeople.toString()}
+          onChangeText={(text) => setNumberOfPeople(parseInt(text, 10))}
+          keyboardType="numeric"
+        />
+
+        <Text style={styles.bookingModalTitle}>Do you have an ID card?</Text>
+        <Switch style={styles.bookingModalSwitch} value={hasID} onValueChange={(value) => setHasID(value)} />
+
+        <Text style={styles.bookingModalTitle}>Payment Method</Text>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={paymentMethod}
+          onChangeText={(text) => setPaymentMethod(text)}
+        />
+
+        <Button title="Open Payment Options" onPress={() => openPaymentModal('Nothing Selected')} />
+
+        <Text style={styles.bookingModalTotalText}>Your Total is: Rs.{selectedPackagePrice * numberOfPeople}</Text>
+
+        <Button title="Confirm Booking" onPress={handleConfirmBooking} />
+      </View>
+    </Modal> */}
+
+{/* <Modal animationType="slide" transparent={false} visible={modalVisible}>
+      <View style={styles.bookingModalContainer}>
+       
+        <View style={styles.row}>
+          <Icon name="user" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>How many people are going?</Text>
+        </View>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={numberOfPeople.toString()}
+          onChangeText={(text) => setNumberOfPeople(parseInt(text, 10))}
+          keyboardType="numeric"
+        />
+
+        <View style={styles.row}>
+          <Icon name="id-card" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>Do you have an ID card?</Text>
+          <Switch style={styles.bookingModalSwitch} value={hasID} onValueChange={(value) => setHasID(value)} />
+
+        </View>
+
+        <View style={styles.row}>
+          <Icon name="credit-card" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>Payment Method</Text>
+        </View>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={paymentMethod}
+          onChangeText={(text) => setPaymentMethod(text)}
+        />
+
+<TouchableOpacity
+          style={styles.openPaymentButton}
+          onPress={() => openPaymentModal('Nothing Selected')}
+        >
+          <Icon name="credit-card" size={20} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.openPaymentButtonText}>Open Payment Options</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.bookingModalTotalText}>Your Total is: Rs.{selectedPackagePrice * numberOfPeople}</Text>
+
+        <TouchableOpacity onPress={handleConfirmBooking} style={styles.confirmBookingButton}>
+          <Icon name="check" size={20} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.confirmBookingButtonText}>Confirm Booking</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={()=>setModalVisible(false)} style={styles.closeButton}>
+          <Icon name="close" size={20} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.closeButtonText}>Close</Text>
+        </TouchableOpacity>
+ 
+      </View>
+    </Modal> */}
+
+
+
+<Modal animationType="slide" transparent={false} visible={modalVisible}>
+      <View style={styles.bookingModalContainer}>
+        <View style={styles.row}>
+          <Icon name="user" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>How many people are going?</Text>
+        </View>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={numberOfPeople.toString()}
+          onChangeText={(text) => setNumberOfPeople(parseInt(text, 10))}
+          keyboardType="numeric"
+        />
+
+        <View style={styles.row}>
+          <Icon name="id-card" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>Do you have an ID card?</Text>
+          <Switch style={styles.bookingModalSwitch} value={hasID} onValueChange={(value) => setHasID(value)} />
+        </View>
+
+        <View style={styles.row}>
+          <Icon name="credit-card" size={40} color="#333" style={styles.icon} />
+          <Text style={styles.bookingModalTitle}>Payment Method</Text>
+        </View>
+        <TextInput
+          style={styles.bookingModalInput}
+          value={paymentMethod}
+          onChangeText={(text) => setPaymentMethod(text)}
+        />
+
+        <TouchableOpacity style={styles.openPaymentButton} onPress={() => openPaymentModal('Nothing Selected')}>
+          <Icon name="credit-card" size={20} color="#FFF" style={styles.buttonIcon} />
+          <Text style={styles.openPaymentButtonText}>Open Payment Options</Text>
+        </TouchableOpacity>
+
+        {/* <Text style={styles.bookingModalTotalText}>Your Total is: Rs.{selectedPackagePrice * numberOfPeople}{selectedPackagePrice}</Text> */}
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity onPress={handleConfirmBooking} style={styles.confirmBookingButton}>
+            <Icon name="check" size={20} color="#FFF" style={styles.buttonIcon} />
+            <Text style={styles.confirmBookingButtonText}>Confirm Booking</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
+            <Icon name="close" size={20} color="#FFF" style={styles.buttonIcon} />
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+
+
+
+      </ScrollView>
+    </View>
+  </View>
+</Modal>
+  {/* <Modal animationType="slide" transparent={true} visible={showPaymentModal}>
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Payment Options</Text>
+          <Text style={styles.modalText}>Please select your payment method:</Text>
+          <View style={styles.paymentOptions}>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => openPaymentModal('Bank')}
+            >
+              <Image
+                source={require('./bank.png')}
+                style={styles.paymentLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.paymentButtonText}>Pay via Bank</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => openPaymentModal('Easypaisa')}
+            >
+              <Image
+                source={require('./money.png')}
+                style={styles.paymentLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.paymentButtonText}>Pay via Easypaisa</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.closeModalButton}
+            onPress={() => setShowPaymentModal(false)}
+          >
+            <Text style={styles.closeModalButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal> */}
+
+ <Modal animationType="slide" transparent={true} visible={showPaymentModal}>
+      <View style={styles.paymentModalContainer}>
+        <View style={styles.paymentModalContent}>
+          <Text style={styles.paymentModalTitle}>Payment Options</Text>
+          <Text style={styles.paymentModalText}>Please select your payment method:</Text>
+          <View style={styles.paymentOptions}>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => openPaymentModal('Bank')}
+            >
+              <Image
+                source={require('./bank.png')}
+                style={styles.paymentLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.paymentButtonText}>Pay via Bank</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => openPaymentModal('Easypaisa')}
+            >
+              <Image
+                source={require('./money.png')}
+                style={styles.paymentLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.paymentButtonText}>Pay via Easypaisa</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.closePaymentModalButton}
+            onPress={() => setShowPaymentModal(false)}
+          >
+            <Text style={styles.closePaymentModalButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+
+        {/* Modal for handling payment methods */}
+        <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showConfirmationModal}
+      >
+        <View style={modalStyles.modalContainer}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>
+              Payment Method: {paymentMethod}
+            </Text>
+            {paymentMethod === 'Easypaisa' && (
+              <View>
+                <Text style={modalStyles.modalText}>
+                  Please send money to this number:
+                  "03325827075"
+                </Text>
+                <Button title="Upload Receipt" onPress={handleImageUpload} />
+                {/* Display the uploaded receipt image here */}
+                {receiptImage && (
+                  <Image
+                    source={{ uri: receiptImage }}
+                    style={modalStyles.receiptImage}
+                  />
+                )}
+              </View>
+            )}
+             {paymentMethod === 'Bank' && (
+              <View>
+                <Text style={modalStyles.modalText}>
+                Acc Title: 
+Imtiaz Azhar 
+</Text><Text style={modalStyles.modalText}>
+
+Acc no: 0509001011800401001
+</Text><Text style={modalStyles.modalText}>
+Iban:
+PK12ABPA0010118004010016
+                </Text>
+                <Button title="Upload Receipt" onPress={handleImageUpload} />
+                {/* Display the uploaded receipt image here */}
+                {receiptImage && (
+                  <Image
+                    source={{ uri: receiptImage }}
+                    style={modalStyles.receiptImage}
+                  />
+                )}
+              </View>
+            )}
+            <TouchableOpacity
+              style={modalStyles.closeModalButton}
+              onPress={() => setShowConfirmationModal(false)}
+            >
+              <Text style={modalStyles.closeModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+  
+<Modal animationType="slide"
+ visible={isFormVisible}>
+        {renderModalContent()}
+
+      </Modal>
+
+
+    </SafeAreaView>
+  );
+};
+
+
+
+
+
+// const modalStyles = StyleSheet.create({
+//   modalContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+//   },
+//   modalContent: {
+//     backgroundColor: 'white',
+//     padding: 20,
+//     borderRadius: 10,
+//     width: '80%',
+//   },
+//   modalTitle: {
+//     fontSize: 18,
+//     fontWeight: 'bold',
+//     marginBottom: 10,
+//   },
+//   modalText: {
+//     fontSize: 16,
+//     marginBottom: 10,
+//   },
+//   closeModalButton: {
+//     marginTop: 20,
+//     backgroundColor: 'red',
+//     padding: 10,
+//     borderRadius: 5,
+//     alignSelf: 'center',
+//   },
+//   closeModalButtonText: {
+//     color: 'white',
+//   },
+// });
+
+const modalStyles = StyleSheet.create({
+  
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#3498db', // Background color for the modal
+  },
+  formContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+  },
+  textInput: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  paymentOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  paymentButton: {
+    alignItems: 'center',
+  },
+  paymentLogo: {
+    width: 100,
+    height: 50,
+    marginBottom: 10,
+  },
+  paymentButtonText: {
+    fontSize: 16,
+  },
+  receiptImage: {
+    width: '100%',
+    height: 200,
+    marginTop: 10,
+  },
+  scrollView: {
+    flexGrow: 1,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    width: '90%',
+    maxHeight: '80%',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+  },
+  subTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  modalText: {
+    fontWeight:'bold',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  closeModalButton: {
+        marginTop: 20,
+        backgroundColor: 'red',
+        padding: 10,
+        borderRadius: 5,
+        alignSelf: 'center',
+      },
+      closeModalButtonn: {
+        marginTop: 20,
+        backgroundColor: 'green',
+        padding: 10,
+        borderRadius: 5,
+        alignSelf: 'center',
+      },
+      closeModalButtonText: {
+        color: 'white',
+      },
+});
+
+
+const modalStyless = {
+  modalFormContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+  },
+  formContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: 300,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 8,
+    marginBottom: 10,
+  },
+  packageTextContainer: {
+    flex: 1, // Allow text to wrap to the next line
+  },
+  modalText: {
+    fontSize: 16,
+    color: 'black',
+    flexWrap: 'wrap', // Allow text to wrap to the next line
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'white', // You can set your desired background color here
+  },
+  kashmirImage: {
+    width: '100%',
+    height: '25%',
+  },
+  modalContent: {
+    backgroundColor: '#2596be', // Set the background color for the description section
+    padding: 20,
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: 'white', // Text color for the title
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: 'white', // Text color for the description
+  },
+  availablePackagesHeading: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
+    color: 'white', // Text color for the "Available Packages" heading
+  },
+  packageContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#eeeee4', // Background color for each package container
+    marginBottom: 10,
+    shadowColor: 'black', // Shadow color
+    shadowOpacity: 0.2, // Shadow opacity
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4, // Shadow radius
+    elevation: 2, // Elevation for Android
+  },
+  packageImage: {
+    width: 80,
+    height: 80,
+    marginRight: 10,
+  },
+ 
+  closeModalButton: {
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  closeModalButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'blue', // Text color for "Close" button
+  },
+};
+
+
+
+
+const styles = StyleSheet.create({
+
+ paymentModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentModalContent: {
+    backgroundColor: '#FFF',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+  },
+  paymentModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  paymentModalText: {
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  paymentOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  paymentButton: {
+    alignItems: 'center',
+  },
+  paymentLogo: {
+    width: 50,
+    height: 50,
+  },
+  paymentButtonText: {
+    marginTop: 5,
+  },
+  closePaymentModalButton: {
+    backgroundColor: '#e74c3c',
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  closePaymentModalButtonText: {
+    color: '#FFF',
+  },
+
+
+
+  bookingModalContainer: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    backgroundColor: '#E0F7FA'
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom:20
+  },
+  icon: {
+    marginRight: 10,
+  },
+  bookingModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  bookingModalInput: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginBottom: 15,
+    paddingHorizontal: 10,
+  },
+  bookingModalSwitch: {
+    marginLeft: 'auto', // Push the Switch to the right
+  },
+  openPaymentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3498db',
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 15,
+    justifyContent: 'center',
+  },
+  openPaymentButtonText: {
+    color: '#FFF',
+    marginLeft: 10,
+  },
+  bookingModalTotalText: {
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  confirmBookingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2ecc71',
+    padding: 10,
+    borderRadius: 5,
+    flex: 1, // Occupy half of the width
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  closeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e74c3c',
+    padding: 10,
+    borderRadius: 5,
+    flex: 1, // Occupy half of the width
+    justifyContent: 'center',
+  },
+  buttonIcon: {
+    marginRight: 10,
+  },
+  confirmBookingButtonText: {
+    color: '#FFF',
+  },
+  closeButtonText: {
+    color: '#FFF',
+  },
+
+
+  modalHeading: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center', // Center the text
+  },
+  sectionHeading: {
+    fontSize: 16,
+    marginTop: 10,
+    fontWeight:'bold',
+    marginBottom:25
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fef8dd',
+    padding: 20,
+    borderRadius: 10,
+  },
+  modalContentt: {
+    backgroundColor: '#fef8dd',
+    padding: 20,
+    borderRadius: 10,
+  },
+  picker: {
+    borderWidth: 1,              // Add a border
+    borderColor: 'gray',        // Border color
+    borderRadius: 5,            // Border radius
+    padding: 10,
+    marginTop: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Semi-transparent white background
+  },
+  accommodationContainer: {
+    backgroundColor: '#eab676',
+    padding: 20,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  aboutYourTourContainer: {
+    backgroundColor: '#caf1de',
+    padding: 20,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  modalFormContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+  },
+  formContainer: {
+    backgroundColor: 'white',
+    width: '100%', // Set the width to 90% of the screen width
+    maxWidth: 400, // Add a maximum width to the form
+    padding: 20,
+    borderRadius: 10,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 8,
+    marginBottom: 10,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
+    height: 120,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+  },
+  rightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  headerIcon: {
+    marginLeft: 12,
+  },
+  packageContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 25,
+    paddingHorizontal: 16,
+  },
+  packageItem: {
+    backgroundColor: '#f0f0f0',
+    padding: 1,
+    marginBottom: 20,
+    borderRadius: 10,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 10,
+      height: 200,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 1,
+    elevation: 5,
+  },
+  packageImage: {
+    width: 360,
+    height: 150,
+    marginBottom: 10,
+    borderRadius: 10,
+  },
+  packageName: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  createPackageButton: {
+    backgroundColor: '#205a7b',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignSelf: 'center',
+    marginTop: 20,
+    marginBottom:10
+  },
+  createPackageButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#205a7b',
+    height: 60,
+  },
+  footerItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 6,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginTop: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: 'white',
+  },
+  searchButton: {
+    padding: 10,
+  },
+});
+
+export default NewTour;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//This is for ADMINNNNNNNN:::
+
+// import React, { useState, useEffect } from 'react';
+// import { View, Text, TouchableOpacity, FlatList, StyleSheet,Image, Alert,Button,ScrollView } from 'react-native';
+// import firestore from '@react-native-firebase/firestore';
+// import storage from '@react-native-firebase/storage';
+// import Modal from 'react-native-modal';
+// import ImageZoomViewer from 'react-native-image-zoom-viewer';
+// const NewTour = () => {
+//   const [isImageViewerVisible, setImageViewerVisible] = useState(false);
+//   const [imageViewerImages, setImageViewerImages] = useState([]);
+//   const [customers, setCustomers] = useState([]);
+//   const [currentPage, setCurrentPage] = useState(1);
+//   const [selectedCustomer, setSelectedCustomer] = useState(null);
+//   const [isModalVisible, setIsModalVisible] = useState(false);
+//   const [confirmationStatus, setConfirmationStatus] = useState({});
+//   const [modalImageVisible, setModalImageVisible] = useState(false);
+//   const [modalImageUrl, setModalImageUrl] = useState('');
+//   const fetchCustomers = async () => {
+//     const customersRef = firestore().collection('customers');
+//     const querySnapshot = await customersRef.get();
+//     const customerData = querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+//     setCustomers(customerData);
+
+//     // Initialize confirmation status for each customer based on selectedPackageId
+//     const initialConfirmationStatus = {};
+//     customerData.forEach((customer) => {
+//       initialConfirmationStatus[customer.id] = customer.selectedPackageId === 'TRUE';
+//     });
+//     setConfirmationStatus(initialConfirmationStatus);
+//   };
+
+//   useEffect(() => {
+//     const unsubscribe = firestore()
+//       .collection('customers')
+//       .onSnapshot(() => {
+//         fetchCustomers();
+//       });
+
+//     return () => {
+//       unsubscribe();
+//     };
+//   }, []);
+
+//   const handleViewMore = (customer) => {
+//     setSelectedCustomer(customer);
+//     toggleModal();
+//   };
+
+//   const confirmBooking = () => {
+//     const customerRef = firestore().collection('customers').doc(selectedCustomer.id);
+//     customerRef.update({ selectedPackageId: 'TRUE' });
+
+//     // Update the confirmation status for the selected customer
+//     setConfirmationStatus((prevStatus) => ({
+//       ...prevStatus,
+//       [selectedCustomer.id]: true,
+//     }));
+//     toggleModal();
+//   };
+  
+//   const cancelBooking = () => {
+//     const customerRef = firestore().collection('customers').doc(selectedCustomer.id);
+//     customerRef.update({ selectedPackage: '', selectedPackageId: 'FALSE' });
+
+//     // Update the confirmation status for the selected customer
+//     setConfirmationStatus((prevStatus) => ({
+//       ...prevStatus,
+//       [selectedCustomer.id]: false,
+//     }));
+//     toggleModal();
+//   };
+//   const toggleModal = () => {
+//     setIsModalVisible(!isModalVisible);
+//   };
+//   const handleViewPaymentProof = async (customer) => {
+//     try {
+//       const customerRef = firestore().collection('customers').doc(customer.id);
+//       const customerDoc = await customerRef.get();
+  
+//       if (customerDoc.exists) {
+       
+  
+//         const paymentProofRef = storage().ref(`paymentProofs/vyvuU8xDA3OYXXxjUHPGcL8QpTl1/${customer.name}_${customer.phoneNumber}/image.jpg`);
+//         const downloadURL = await paymentProofRef.getDownloadURL();
+//   console.log(`paymentProofs/vyvuU8xDA3OYXXxjUHPGcL8QpTl1/${customer.name}_${customer.phoneNumber}/image.jpg`)
+//         // Open the payment proof in a new window or navigate to a screen to display it
+//         // You can use any library or method to display the image, such as react-native-image-zoom-viewer or react-native-image
+//         setModalImageVisible(true);
+//       setModalImageUrl(downloadURL);
+//         // For example, using react-native-image-zoom-viewer:
+//         const images = [{ url: downloadURL }];
+//         setImageViewerVisible(true);
+//         setImageViewerImages(images);
+//       } else {
+        
+//         console.error('Customer document not found.');
+//         // Handle the case where the customer document does not exist
+//       }
+//     } catch (error) {
+//       console.error('Error fetching payment proof:', error);
+  
+//       // Show an alert when there is an error fetching the payment proof
+//       Alert.alert(
+//         'Error',
+//         'Proof not found',
+//         [
+//           { text: 'OK', onPress: () => console.log('OK Pressed') },
+//         ],
+//         { cancelable: false }
+//       );
+//     }
+//   };
+//   const [customPackages, setCustomPackages] = useState([]);
+//   const [selectedCustomPackage, setSelectedCustomPackage] = useState(null);
+//   const [isCustomPackageModalVisible, setCustomPackageModalVisible] = useState(false);
+//   const handleViewCustomPackage = (customPackage) => {
+//     setSelectedCustomPackage(customPackage);
+//     setCustomPackageModalVisible(true);
+//   };
+  
+//   // Triggered when close button is pressed
+//   const handleCloseCustomPackageModal = () => {
+//     setCustomPackageModalVisible(false);
+//   };
+//   // const handleCustomPackages = () => {
+//   //   // Fetch custom packages from Firestore and update state
+//   //   firestore()
+//   //     .collection('Custom packages')
+//   //     .get()
+//   //     .then((querySnapshot) => {
+//   //       const customPackagesData = [];
+//   //       querySnapshot.forEach((doc) => {
+//   //         const data = doc.data();
+//   //         customPackagesData.push({ id: doc.id, ...data });
+//   //       });
+
+//   //       // Update the state with the fetched custom packages
+//   //       setCustomPackages(customPackagesData);
+//   //     })
+//   //     .catch((error) => {
+//   //       console.log('Error fetching custom packages:', error);
+//   //       // Handle errors, e.g., display an error message to the admin
+//   //     });
+//   // };
+
+//   // return (
+//   //   <View style={styles.container}>
+//   //     <Text style={styles.heading}>Registered Customers</Text>
+//   //     <FlatList
+//   //       data={customers}
+//   //       renderItem={({ item, index }) => (
+//   //         <View style={styles.customerItem}>
+//   //           <View style={styles.customerNumber}>
+//   //             <Text style={styles.customerNumberText}>{index + 1}</Text>
+//   //           </View>
+//   //           <Text style={styles.customerName}>{item.name}</Text>
+//   //           <View
+//   //             style={
+//   //               confirmationStatus[item.id]
+//   //                 ? [styles.indicator, styles.confirmedIndicator]
+//   //                 : [styles.indicator, styles.unconfirmedIndicator]
+//   //             }
+//   //           />
+//   //           <TouchableOpacity
+//   //             style={styles.viewMoreButton}
+//   //             onPress={() => handleViewMore(item)}
+//   //           >
+//   //             <Text style={styles.viewMoreButtonText}>View More Info</Text>
+//   //           </TouchableOpacity>
+//   //         </View>
+//   //       )}
+//   //       keyExtractor={(item) => item.id}
+//   //     />
+
+//   //     <Modal isVisible={isModalVisible}>
+//   //       <View style={styles.modalContainer}>
+//   //         <Text style={styles.modalTitle}>Customer Details</Text>
+//   //         <Text style={styles.modalText}>Name: {selectedCustomer?.name}</Text>
+//   //         <Text style={styles.modalText}>Email: {selectedCustomer?.email}</Text>
+//   //         <Text style={styles.modalText}>
+//   //           Selected Package: {selectedCustomer?.selectedPackage}
+//   //         </Text>
+//   //         <Text style={styles.modalText}>
+//   //           Phone Number: {selectedCustomer?.phoneNumber}
+//   //         </Text>
+//   //         <TouchableOpacity
+//   //           style={styles.confirmButton}
+//   //           onPress={confirmBooking}
+//   //         >
+//   //           <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+//   //         </TouchableOpacity>
+//   //         <TouchableOpacity
+//   //       style={styles.cancelButton}
+//   //       onPress={cancelBooking}
+//   //     >
+//   //       <Text style={styles.cancelButtonText}>Cancel Booking</Text>
+//   //     </TouchableOpacity>
+//   //         <TouchableOpacity
+//   //           style={styles.confirmButton}
+//   //           onPress={() => handleViewPaymentProof(selectedCustomer)}
+//   //         >
+//   //           <Text style={styles.confirmButtonText}>View Payment Proof</Text>
+//   //         </TouchableOpacity>
+//   //         <TouchableOpacity
+//   //           style={styles.closeButton}
+//   //           onPress={toggleModal}
+//   //         >
+//   //           <Text style={styles.closeButtonText}>Close</Text>
+//   //         </TouchableOpacity>
+//   //       </View>
+//   //     </Modal>
+//   //     <Modal
+//   //       isVisible={modalImageVisible}
+//   //       onBackdropPress={() => setModalImageVisible(false)}
+//   //     >
+//   //       <View style={styles.modalContainer}>
+//   //         <Image
+//   //           source={{ uri: modalImageUrl }}
+//   //           style={styles.modalImage}
+//   //           resizeMode="contain"
+//   //         />
+//   //       </View>
+//   //     </Modal>
+//   //     <Modal visible={isCustomPackageModalVisible}>
+//   //       <View style={styles.modalContainer}>
+//   //         <Text style={styles.modalTitle}>Custom Package Details</Text>
+//   //         <Text style={styles.modalText}>Customer ID: {selectedCustomPackage?.id}</Text>
+//   //         {/* Display other custom package details here */}
+//   //         {/* ... */}
+//   //         <TouchableOpacity
+//   //           style={styles.closeButton}
+//   //           onPress={() => setCustomPackageModalVisible(false)}
+//   //         >
+//   //           <Text style={styles.closeButtonText}>Close</Text>
+//   //         </TouchableOpacity>
+//   //       </View>
+//   //     </Modal>
+//   //     <ImageZoomViewer
+//   //       imageUrls={imageViewerImages}
+//   //       enableSwipeDown
+//   //       onSwipeDown={() => setImageViewerVisible(false)}
+//   //       backgroundColor="black"
+//   //       index={0}
+//   //       failImageSource={{ url: 'https://example.com/image-not-found.jpg' }}
+//   //       style={{ zIndex: 9999 }}
+//   //     />
+      
+//   //     <Button title="Custom Packages of Customers" onPress={handleCustomPackages} />
+//   //   </View>
+    
+//   // );
+  
+//   const handleCustomPackages = () => {
+//     // Fetch custom packages from Firestore and update state
+//     firestore()
+//       .collection('Custom packages')
+//       .get()
+//       .then((querySnapshot) => {
+//         const customPackagesData = [];
+//         querySnapshot.forEach((doc) => {
+//           const data = doc.data();
+//           customPackagesData.push({ id: doc.id, ...data });
+//         });
+
+//         // Update the state with the fetched custom packages
+//         setCustomPackages(customPackagesData);
+//       })
+//       .catch((error) => {
+//         console.log('Error fetching custom packages:', error);
+//         // Handle errors, e.g., display an error message to the admin
+//       });
+//   };
+
+//   const [isCustomPackagesListModalVisible, setCustomPackagesListModalVisible] = useState(false);
+
+//   const handleCustomPackagesListModal = () => {
+//     setCustomPackagesListModalVisible(true);
+//     handleCustomPackages(); // Fetch custom packages when the modal opens
+//   };
+
+//   return (
+//     <View style={styles.container}>
+//       <Text style={styles.heading}>Registered Customers</Text>
+//       <FlatList
+//         data={customers}
+//         renderItem={({ item, index }) => (
+//           <View style={styles.customerItem}>
+//             <View style={styles.customerNumber}>
+//               <Text style={styles.customerNumberText}>{index + 1}</Text>
+//             </View>
+//             <Text style={styles.customerName}>{item.name}</Text>
+//             <View
+//               style={
+//                 confirmationStatus[item.id]
+//                   ? [styles.indicator, styles.confirmedIndicator]
+//                   : [styles.indicator, styles.unconfirmedIndicator]
+//               }
+//             />
+//             <TouchableOpacity
+//               style={styles.viewMoreButton}
+//               onPress={() => handleViewMore(item)}
+//             >
+//               <Text style={styles.viewMoreButtonText}>View More Info</Text>
+//             </TouchableOpacity>
+//           </View>
+//         )}
+//         keyExtractor={(item) => item.id}
+//       />
+
+//       <Modal isVisible={isModalVisible}>
+//         <View style={styles.modalContainer}>
+//           <Text style={styles.modalTitle}>Customer Details</Text>
+//           <Text style={styles.modalText}>Name: {selectedCustomer?.name}</Text>
+//           <Text style={styles.modalText}>Email: {selectedCustomer?.email}</Text>
+//           <Text style={styles.modalText}>
+//             Selected Package: {selectedCustomer?.selectedPackage}
+//           </Text>
+//           <Text style={styles.modalText}>
+//             Phone Number: {selectedCustomer?.phoneNumber}
+//           </Text>
+//           <TouchableOpacity
+//             style={styles.confirmButton}
+//             onPress={confirmBooking}
+//           >
+//             <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+//           </TouchableOpacity>
+//           <TouchableOpacity
+//             style={styles.cancelButton}
+//             onPress={cancelBooking}
+//           >
+//             <Text style={styles.cancelButtonText}>Cancel Booking</Text>
+//           </TouchableOpacity>
+//           <TouchableOpacity
+//             style={styles.confirmButton}
+//             onPress={() => handleViewPaymentProof(selectedCustomer)}
+//           >
+//             <Text style={styles.confirmButtonText}>View Payment Proof</Text>
+//           </TouchableOpacity>
+//           <TouchableOpacity
+//             style={styles.closeButton}
+//             onPress={toggleModal}
+//           >
+//             <Text style={styles.closeButtonText}>Close</Text>
+//           </TouchableOpacity>
+//         </View>
+//       </Modal>
+
+//       <Modal
+//         isVisible={modalImageVisible}
+//         onBackdropPress={() => setModalImageVisible(false)}
+//       >
+//         <View style={styles.modalContainer}>
+//           <Image
+//             source={{ uri: modalImageUrl }}
+//             style={styles.modalImage}
+//             resizeMode="contain"
+//           />
+//         </View>
+//       </Modal>
+// {/* 
+//       <Modal visible={isCustomPackageModalVisible}>
+//         <View style={styles.modalContainer}>
+//           <Text style={styles.modalTitle}>Custom Package Details</Text>
+//           <Text style={styles.modalText}>Customer ID: {selectedCustomPackage?.id}</Text>
+      
+//           <TouchableOpacity
+//             style={styles.closeButton}
+//             onPress={handleCloseCustomPackageModal}
+//           >
+//             <Text style={styles.closeButtonText}>Close</Text>
+//           </TouchableOpacity>
+//         </View>
+//       </Modal> */}
+
+// {/* <Modal visible={isCustomPackageModalVisible}>
+//   <View style={styles.modalContainer}>
+//     <Text style={styles.modalTitle}>Custom Package Details</Text>
+//     <Text style={styles.modalText}>Customer ID: {selectedCustomPackage?.id}</Text>
+
+
+//     {Object.entries(selectedCustomPackage || {}).map(([key, value]) => (
+//       <Text key={key} style={styles.modalText}>
+//         {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+//       </Text>
+//     ))}
+
+//     <TouchableOpacity
+//       style={styles.closeButton}
+//       onPress={handleCloseCustomPackageModal}
+//     >
+//       <Text style={styles.closeButtonText}>Close</Text>
+//     </TouchableOpacity>
+//   </View>
+// </Modal> */}
+
+
+// <Modal visible={isCustomPackageModalVisible}>
+//   <ScrollView>
+//     <View style={styles.modalContainer}>
+//       <Text style={styles.modalTitle}>Custom Package Details</Text>
+//       <Text style={styles.modalText}>Customer ID: {selectedCustomPackage?.id}</Text>
+
+//       {/* Display other custom package details */}
+//       {Object.entries(selectedCustomPackage || {}).map(([key, value]) => (
+//         <Text key={key} style={styles.modalText}>
+//           {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+//         </Text>
+//       ))}
+
+//       <TouchableOpacity
+//         style={styles.closeButton}
+//         onPress={handleCloseCustomPackageModal}
+//       >
+//         <Text style={styles.closeButtonText}>Close</Text>
+//       </TouchableOpacity>
+//     </View>
+//   </ScrollView>
+// </Modal>
+
+
+
+      
+
+    
+//       <Modal isVisible={isCustomPackagesListModalVisible}>
+//         <View style={styles.modalContainer}>
+//           <Text style={styles.modalTitle}>Custom Packages List</Text>
+          
+//           {customPackages.length > 0 ? (
+//             <FlatList
+//               data={customPackages}
+//               keyExtractor={(item) => item.id}
+//               renderItem={({ item }) => (
+//                 <View style={styles.customPackageItem}>
+//                   <Text>{item.createdBy}</Text>
+//                   <Button
+//                     title="Open More Info"
+//                     onPress={() => handleViewCustomPackage(item)}
+//                   />
+//                 </View>
+//               )}
+//             />
+//           ) : (
+//             <Text>No custom packages available.</Text>
+//           )}
+          
+//           <TouchableOpacity
+//             style={styles.closeButton}
+//             onPress={() => setCustomPackagesListModalVisible(false)}
+//           >
+//             <Text style={styles.closeButtonText}>Close</Text>
+//           </TouchableOpacity>
+//         </View>
+//       </Modal>
+  
+
+//       <Button title="Open Custom Packages" onPress={handleCustomPackagesListModal} />
+
+
+//     </View>
+//   );
+
+// };
+
+
+
+// const styles = StyleSheet.create({
+//   customPackagesListModalContainer: {
+//     flex: 1,
+//     backgroundColor: 'white',
+//     borderRadius: 10,
+//     padding: 20,
+//   },
+//   customPackageItem: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     marginBottom: 10,
+//   },
+//   customPackageItemText: {
+//     fontSize: 16,
+//     color: 'black',
+//   },
+//   openMoreInfoButton: {
+//     backgroundColor: 'blue',
+//     padding: 10,
+//     borderRadius: 5,
+//   },
+//   openMoreInfoButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+//   closeButton: {
+//     alignSelf: 'flex-end',
+//     marginTop: 10,
+//     padding: 10,
+//     borderRadius: 5,
+//     backgroundColor: 'red',
+//   },
+//   closeButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+//   cancelButton: {
+//     backgroundColor: 'red',
+//     padding: 10,
+//     borderRadius: 10,
+//     marginVertical: 10,
+//     elevation: 3,
+//   },
+//   cancelButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+
+
+//   container: {
+//     flex: 1,
+//     padding: 20,
+//   },
+//   heading: {
+//     fontSize: 24,
+//     fontWeight: 'bold',
+//     marginBottom: 20,
+//   },
+//   customerItem: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     paddingVertical: 10,
+//     paddingHorizontal: 20,
+//     borderBottomWidth: 1,
+//     borderColor: '#ddd',
+//   },
+//   customerNumber: {
+//     width: 40,
+//     alignItems: 'center',
+//   },
+//   customerNumberText: {
+//     fontSize: 16,
+//   },
+//   customerName: {
+//     flex: 1,
+//     fontSize: 18,
+//   },
+//   indicator: {
+//     width: 10,
+//     height: 10,
+//     borderRadius: 5,
+//     marginRight: 20,
+//   },
+//   confirmedIndicator: {
+//     backgroundColor: 'green',
+//   },
+//   unconfirmedIndicator: {
+//     backgroundColor: 'red',
+//   },
+//   viewMoreButton: {
+//     backgroundColor: '#3498db',
+//     padding: 10,
+//     borderRadius: 10,
+//     elevation: 3,
+//   },
+//   viewMoreButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+//   modalContainer: {
+//     backgroundColor: 'white',
+//     padding: 20,
+//     borderRadius: 10,
+//   },
+//   modalTitle: {
+//     fontSize: 20,
+//     fontWeight: 'bold',
+//     marginBottom: 10,
+//   },
+//   modalText: {
+//     fontSize: 16,
+//     marginBottom: 10,
+//   },
+//   confirmButton: {
+//     backgroundColor: 'green',
+//     padding: 10,
+//     borderRadius: 10,
+//     marginVertical: 10,
+//     elevation: 3,
+//   },
+//   confirmButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+//   closeButton: {
+//     backgroundColor: 'red',
+//     padding: 10,
+//     borderRadius: 10,
+//     elevation: 3,
+//   },
+//   closeButtonText: {
+//     color: 'white',
+//     fontSize: 16,
+//   },
+//   modalImage: {
+//     width: 300,
+//     height: 300,
+//   },
+// });
+
+
+// export default NewTour;
